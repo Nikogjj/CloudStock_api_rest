@@ -17,10 +17,12 @@ export class DocumentsModel{
         })
         .then(connection=>{
             DocumentsModel.connection_etat=connection;
-            // console.log("ICI : ",connection);
-            // console.log("ICI : ",DocumentsModel.connection_etat);
             return DocumentsModel.connection_etat;
         })
+    }
+
+    static async createAccount(identifiant, password){
+        const createAccount = await DocumentsModel.connection_etat.query(`INSERT INTO Users (identifiant,password) VALUES("${identifiant}","${password}")`);
     }
 
     static async createDocuments(name,owner,completeFileName){

@@ -4,7 +4,9 @@ import fileUpload from "express-fileupload"
 import mariadb from "mariadb";
 import fs from "fs/promises"
 import { DocumentsModel } from "./models/DocumentsModel.js";
-import { json } from "stream/consumers";
+import jwt from "jsonwebtoken";
+
+const secret = "test";
 
 const app = express()
 const port = 3400;
@@ -13,6 +15,23 @@ app.use(cors());
 app.use(express.static("public"));
 app.use(fileUpload());
 app.use(express.json());
+
+app.get("/login",async(req,res)=>{
+    
+})
+
+app.post("/create_account",async (req,res)=>{
+    const payload = {identifiant : req.body.identifiant, password : req.body.password};
+    const newToken = jwt.sign(payload,secret,{
+        expiresIn:"30 days"
+    });
+    
+    console.log("identifiant : ",req.body.identifiant);
+    console.log("password : ",req.body.password);
+    const connection = await DocumentsModel.connection();
+    const enregistrement = await DocumentsModel.createAccount(req.body.identifiant,req.body.password);
+    res.json({jwt:newToken});
+})
 
 app.post("/upload_documents",async (req,res)=>{
     const body = req.body;
@@ -87,13 +106,12 @@ app.delete("/delete_document", async (req,res)=>{
 
 app.delete("/delete_all_documents",async(req,res)=>{
     // j'attend juste le nom de l'owner pour pouvoir tout delete dans la bdd
-    console.log(req.body.owner); 
+    console.log("LIGNE 90 : ",req.body.owner); 
     const connection = await DocumentsModel.connection();
     const tab_documents = await DocumentsModel.getAllDocuments(req.body.owner);
 
     tab_documents.forEach((document) => {
         console.log(`./public/${document.url}`);
-        // console.log(document.url);
         fs.rm(`./public/${document.url}`);
     });
     const result = await DocumentsModel.deleteAllDocuments(req.body.owner);
