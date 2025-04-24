@@ -99,10 +99,11 @@ app.post("/upload_documents",async (req,res)=>{
 
     
 })
-app.get("/get_document/:filename",async (req,res)=>{
+app.get("/get_document/:filename/:token",async (req,res)=>{
 
-    const authHeader = req.headers.authorization;
+    const authHeader = req.params.token;
     const tokenToVerify = authHeader.split(" ")[1];
+    console.log(tokenToVerify);
 
     jwt.verify(tokenToVerify,secret,async (err,decodedToken)=>{
         if (err) {
@@ -114,7 +115,7 @@ app.get("/get_document/:filename",async (req,res)=>{
             const filename = req.params.filename;
             const owner_id = decodedToken.id
             const buf = await fs.readFile(`./public/${owner_id}/${filename}`)
-            res.send(buf);
+            res.status(200).send(buf);
             return;
         }
     })
