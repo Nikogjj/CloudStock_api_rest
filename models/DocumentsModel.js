@@ -21,13 +21,25 @@ export class DocumentsModel{
         })
     }
 
-    static async createAccount(identifiant, password){
-        const createAccount = await DocumentsModel.connection_etat.query(`INSERT INTO Users (identifiant,password) VALUES("${identifiant}","${password}")`);
+    static async login(identifiant,password){
+        const login = await DocumentsModel.connection_etat.query(`SELECT * FROM Users WHERE identifiant="${identifiant}" AND password="${password}"`);
+        return login;
     }
 
-    static async createDocuments(name,owner,completeFileName){
+
+    static async checkValidNewUserName(identifiant){
+        const check = await DocumentsModel.connection_etat.query(`SELECT * FROM Users WHERE identifiant="${identifiant}";`)
+        return check;
+    }
+
+    static async createAccount(identifiant, password){
+        const createAccount = await DocumentsModel.connection_etat.query(`INSERT INTO Users (identifiant,password) VALUES("${identifiant}","${password}")`);
+        return createAccount;
+    }
+
+    static async createDocuments(name,id,completeFileName){
         // console.log(name,owner,completeFileName);
-        const results = await DocumentsModel.connection_etat.query(`INSERT INTO Documents (name,owner,url) VALUES ("${name}","${owner}","${completeFileName}");`)
+        const results = await DocumentsModel.connection_etat.query(`INSERT INTO Documents (owner_id,name,owner_name) VALUES ("${id}","${completeFileName}","${name}");`)
         .catch(error=>console.error("Error de createDocuments : ",error.sqlMessage));
 
         return results;
@@ -41,7 +53,7 @@ export class DocumentsModel{
     }
 
     static async getAllDocuments(owner){
-        const result = await DocumentsModel.connection_etat.query(`SELECT * FROM Documents WHERE owner="${owner}";`)
+        const result = await DocumentsModel.connection_etat.query(`SELECT * FROM Documents WHERE owner_id="${owner}";`)
         .catch(error => console.error(error));
         return result;
     }

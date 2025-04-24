@@ -1,10 +1,10 @@
 import express from "express"
 import cors from "cors"
 import fileUpload from "express-fileupload"
-import mariadb from "mariadb";
 import fs from "fs/promises"
 import { DocumentsModel } from "./models/DocumentsModel.js";
 import jwt from "jsonwebtoken";
+import { decode } from "punycode";
 
 const secret = "test";
 
@@ -16,78 +16,135 @@ app.use(express.static("public"));
 app.use(fileUpload());
 app.use(express.json());
 
-app.get("/login",async(req,res)=>{
-    
-})
-
-app.post("/create_account",async (req,res)=>{
-    const payload = {identifiant : req.body.identifiant, password : req.body.password};
+app.post("/login",async(req,res)=>{
+    const connection = await DocumentsModel.connection();
+    const login = await DocumentsModel.login(req.body.identifiant,req.body.password); 
+    console.log("login dans le main:",login);
+    console.log(login[0].id)
+    const payload = {id : login[0].id, identifiant : req.body.identifiant, password : req.body.password};
     const newToken = jwt.sign(payload,secret,{
         expiresIn:"30 days"
     });
-    
+    if (login.length==1)
+    {
+        console.log("le compte existe");
+        res.status(200).json({jwt:newToken})
+    }
+    else{
+        res.status(400).json({msg:"mauvais mot de passe ou identifiant",data:null})
+    }
+})
+app.post("/create_account",async (req,res)=>{
     console.log("identifiant : ",req.body.identifiant);
     console.log("password : ",req.body.password);
-    const connection = await DocumentsModel.connection();
-    const enregistrement = await DocumentsModel.createAccount(req.body.identifiant,req.body.password);
-    res.json({jwt:newToken});
-})
-
-app.post("/upload_documents",async (req,res)=>{
-    const body = req.body;
-    const url = req.files.url;
-    console.log(body.name);
-    console.log(body.owner);
-    console.log(url);
-
-    if (url==undefined) {
-        req.status(400).json({msg:"Pas de document envoyé"});
+    console.log("password : ",req.body.checkPassword);
+    if (req.body.checkPassword != req.body.password) {
+        console.log("passwords doesn't match")
+        res.status(400).json({error : "Passwords doesn't match",msg : "Les mots de passe ne sont pas identiques"});
         return;
     }
-
-    const extensionFile = url.name.split(".")[1];
-    const fileName = url.name.split(".")[0];
-    const completeFileName = `${fileName}_${Date.now()}.${extensionFile}`;
-    
-    url.mv(`./public/${completeFileName}`);
-
     const connection = await DocumentsModel.connection();
-    const result = await DocumentsModel.createDocuments(body.name,body.owner,completeFileName);
-
-    res.json({url:`http://localhost:3400/${completeFileName}`});
+    const check = await DocumentsModel.checkValidNewUserName(req.body.identifiant);
+    console.log("CHECK : ",check);
+    if (check.length>0) {
+        console.log("IL Y A DEJA DES USERS AVEC CE NAME")
+        res.status(400).json({error : "Username already used",msg : "L'identifiant choisi est déjà attribué"});
+    }
+    else{
+        const enregistrement = await DocumentsModel.createAccount(req.body.identifiant,req.body.password);
+        res.status(200).json({error : "none", msg : "Compte créé avec succès. Vous pouvez maintenant vous connecter"});
+    }
 })
-// app.use((req,res)=>res.status(400).json({msg:"La route n'existe pas"}));
+app.post("/upload_documents",async (req,res)=>{
 
+    const authHeader = req.headers.authorization;
+    const tokenToVerify = authHeader.split(" ")[1];
+
+    jwt.verify(tokenToVerify,secret,async (err,decodedToken)=>{
+        if (err) {
+            console.log(err.message)
+            res.status(400).json({error : "Unauthorized acces, wring token", msg : "Accès non autorisé"});
+            return;
+        }
+        else{
+            console.log(decodedToken.identifiant)
+            const file = req.files.file;
+            if (file==undefined) {
+                req.status(400).json({msg:"Pas de document envoyé"});
+                return;
+            }
+            const extensionFile = file.name.split(".")[1];
+            const fileName = file.name.split(".")[0];
+            const completeFileName = `${fileName}_${Date.now()}.${extensionFile}`;
+            
+            // if (fs.readdir(`./public/${decodedToken.id}`)) {
+                
+            // }
+
+            await fs.mkdir(`./public/${decodedToken.id}`)
+            .catch(error=>{
+                if (error.errno != -17) {
+                    console.log(error)
+                }
+            })
+            file.mv(`./public/${decodedToken.id}/${completeFileName}`);
+        
+            const connection = await DocumentsModel.connection();
+            const result = await DocumentsModel.createDocuments(decodedToken.identifiant,decodedToken.id,completeFileName);
+            console.log(result)
+            res.json({ok : "ok"})
+            return;
+        }
+    })
+
+    
+})
 app.get("/get_document/:filename",async (req,res)=>{
-    // je m'attend a recevoir juste l'url du file pour pouvoir le select par son nom dans ma bdd
-    // const filename = req.body.filename;
-    console.log("okdqkdsq");
-    const filename = req.params.filename;
 
-    const buf = await fs.readFile(`./public/${filename}`)
+    const authHeader = req.headers.authorization;
+    const tokenToVerify = authHeader.split(" ")[1];
+
+    jwt.verify(tokenToVerify,secret,async (err,decodedToken)=>{
+        if (err) {
+            console.log(err.message)
+            res.status(400).json({error : "Unauthorized acces, wring token", msg : "Accès non autorisé"});
+            return;
+        }
+        else{
+            const filename = req.params.filename;
+            const owner_id = decodedToken.id
+            const buf = await fs.readFile(`./public/${owner_id}/${filename}`)
+            res.send(buf);
+            return;
+        }
+    })
 
     // const connection = await DocumentsModel.connection();
     // const result = await DocumentsModel.getDocument(filename);
 
-    res.send(buf);
     
 })
+app.get("/get_all_documents", (req,res)=>{
+    const authHeader = req.headers.authorization;
+    const tokenToVerify = authHeader.split(" ")[1];
 
-app.get("/get_all_documents/:owner", async (req,res)=>{
-    // j'attend un objet avec attribut : name(owner)
-    // const body = req.body;
-    // console.log(body);
-    const name_owner = req.params.owner;
-    console.log(name_owner);
+    jwt.verify(tokenToVerify,secret,async (err,decodedToken)=>{
+        if (err) {
+            console.log(err.message)
+            res.status(400).json({error : "Unauthorized acces, wring token", msg : "Accès non autorisé"});
+            return;
+        }
+        else{
+            console.log(decodedToken);
+            const connection = await DocumentsModel.connection();
+            const result = await DocumentsModel.getAllDocuments(decodedToken.id);
+            console.log("result : ",result);
+            res.status(200).json({id : decodedToken.id , identifiant : decodedToken.identifiant, documents : result});
+            return;
+        }
+    })
 
-    const connection = await DocumentsModel.connection();
-    const result = await DocumentsModel.getAllDocuments(name_owner);
-
-    res.json(result);
 })
-
-
-
 app.delete("/delete_document", async (req,res)=>{
     // j'attend un objet avec juste l'url du fichier a supprimer
     const filename = req.body.filename;
@@ -103,7 +160,6 @@ app.delete("/delete_document", async (req,res)=>{
         warning : result.warning
     });
 })
-
 app.delete("/delete_all_documents",async(req,res)=>{
     // j'attend juste le nom de l'owner pour pouvoir tout delete dans la bdd
     console.log("LIGNE 90 : ",req.body.owner); 
@@ -123,8 +179,6 @@ app.delete("/delete_all_documents",async(req,res)=>{
     });
 
 })
-
-
 
 app.listen(port,()=>{
     console.log(`server listen on port ${port}`)
