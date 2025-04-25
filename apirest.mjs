@@ -146,20 +146,45 @@ app.get("/get_all_documents", (req,res)=>{
     })
 
 })
-app.delete("/delete_document", async (req,res)=>{
+app.delete("/delete_document/:id", async (req,res)=>{
     // j'attend un objet avec juste l'url du fichier a supprimer
-    const filename = req.body.filename;
-    const connection = await DocumentsModel.connection();
-    const result = await DocumentsModel.deleteSingleDocument(filename);
-    
-    fs.rm(`./public/${filename}`);
+    const authHeader = req.headers.authorization;
+    const tokenToVerify = authHeader.split(" ")[1];
 
-    console.log("result dans mon main : ",result);
-    res.json({
-        affectedRow:result.affectedRow,
-        insertId : Number(result.insertId),
-        warning : result.warning
-    });
+    jwt.verify(tokenToVerify,secret,async(err,decodedToken)=>{
+        if (err) {
+            console.log(err)
+            res.status(400).json({error : "Unauthorized acces, wring token", msg : "Accès non autorisé"});
+            return;
+        }
+        else{
+            const documentToDelete = req.params.id
+            console.log(documentToDelete)
+            const connection = await DocumentsModel.connection();
+            const select = await DocumentsModel.getDocument(documentToDelete)
+            .catch(error=>{
+                console.log(error)
+                return "error"
+            })
+            if (select == "error") {
+                res.status(400).json({error : "server error", msg : "erreur du serveur"})
+                return;
+            }
+            console.log(select);
+            const nameDocumentToDelete = select[0].name;
+            
+            const result = await DocumentsModel.deleteSingleDocument(nameDocumentToDelete)
+
+            if (result == -1) {
+                res.status(400).json({error : "Server error", msg : "Erreur du serveur"});
+                return;
+            }
+            else{
+                fs.rm(`./public/${decodedToken.id}/${nameDocumentToDelete}`)
+                res.status(200).json({error : "none",msg : "document supprimé"})
+            }
+        }
+    })
 })
 app.delete("/delete_all_documents",async(req,res)=>{
     // j'attend juste le nom de l'owner pour pouvoir tout delete dans la bdd

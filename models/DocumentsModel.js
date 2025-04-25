@@ -45,11 +45,8 @@ export class DocumentsModel{
         return results;
     }
 
-    static async getDocument(finalename){
-        const result = await DocumentsModel.connection_etat.query(`SELECT * FROM Documents WHERE url="${finalename}"`)
-        .catch(error=>console.error(error));
-
-        return result;
+    static async getDocument(id){
+        return DocumentsModel.connection_etat.query(`SELECT * FROM Documents WHERE id="${id}"`);
     }
 
     static async getAllDocuments(owner){
@@ -58,12 +55,12 @@ export class DocumentsModel{
         return result;
     }
 
-    static async deleteSingleDocument(fileName){
-        const result = await DocumentsModel.connection_etat.query(`DELETE FROM Documents WHERE url ="${fileName}";`)
+    static async deleteSingleDocument(name){
+        const result = await DocumentsModel.connection_etat.query(`DELETE FROM Documents WHERE name ="${name}";`)
         .catch(error=>{
             console.error(error);
-        });
-        console.log("result : ",result);
+            return -1;
+        })
         return result;
     }
 
